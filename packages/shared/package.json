@@ -1,0 +1,20 @@
+{
+  "name": "@camp-dilly/shared",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Types and pure pricing/meal-count logic shared by the API and the web app — the single source of truth for how a booking's numbers are computed.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "lint": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.13",
+    "@types/node": "^22.7.5",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "typescript": "^5.6.3"
+  }
+}

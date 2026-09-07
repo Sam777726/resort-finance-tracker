@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ground: #F6F2E7; --surface: #FFFFFF; --surface-2: #EFE9D8;
+  --ink: #21261C; --ink-dim: #63684F; --border: #DDD5BE;
+  --accent: #3F6B3F; --accent-ink: #FFFFFF; --accent-soft: #E3EEDD; --accent-strong: #2E5230;
+  --amber: #B9720F; --amber-soft: #F7EAD1;
+  --danger: #A9432A; --danger-soft: #F5DED4;
+  --success: #3F6B3F; --success-soft: #E3EEDD;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #14170F; --surface: #1D2216; --surface-2: #252B1C;
+    --ink: #EAE6D6; --ink-dim: #A2A088; --border: #343A28;
+    --accent: #82B96E; --accent-ink: #11170C; --accent-soft: #243021; --accent-strong: #9CCB86;
+    --amber: #E3A24D; --amber-soft: #332912;
+    --danger: #E08363; --danger-soft: #3A2419;
+    --success: #82B96E; --success-soft: #243021;
+  }
+}
+
+html, body, #root { height: 100%; }
+body { background: var(--ground); color: var(--ink); font-family: 'Public Sans', sans-serif; margin: 0; }
+h1, h2, h3 { font-family: 'Fraunces', Georgia, serif; }
+.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }

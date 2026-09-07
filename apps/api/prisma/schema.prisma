@@ -1,0 +1,162 @@
+// Camp Dilly Ledger — Prisma schema (PostgreSQL)
+//
+// Modeling choice: fields that reports filter/sort/aggregate on (date,
+// amounts, status, category) are real columns so Postgres can index and
+// query them directly; genuinely nested, non-queried structures (meal
+// counts, payment splits) are JSONB. Session state deliberately does NOT
+// live here — access/refresh tokens live in Redis (see apps/api/src/auth),
+// so a login never costs a Postgres write.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StaffRole {
+  admin
+  staff
+}
+
+enum BalanceStatus {
+  pending
+  received
+}
+
+model Staff {
+  id        String    @id @default(cuid())
+  name      String
+  role      StaffRole @default(staff)
+  pinHash   String
+  pinSalt   String
+  createdAt DateTime  @default(now())
+
+  dayEntries       IncomeDay[]
+  overnightEntries IncomeOvernight[]
+  storeEntries     IncomeStore[]
+  expenses         Expense[]
+
+  @@map("staff")
+}
+
+/// Key/value settings store — one row per config key, value as JSONB.
+/// Keys: general, day_packages, tent_types, extra_person_rates,
+/// expense_categories, store_items, category_budgets.
+model Setting {
+  key   String @id
+  value Json
+
+  @@map("settings")
+}
+
+model IncomeDay {
+  id            String        @id @default(cuid())
+  date          DateTime      @db.Date
+  packageId     String
+  packageLabel  String
+  rate          Float
+  walkIn        Boolean       @default(false)
+  tentId        String?
+  tentName      String?
+  paxBelow5     Int           @default(0)
+  pax5to10      Int           @default(0)
+  paxAbove10    Int           @default(0)
+  totalPax      Int
+  meals         Json
+  amount        Float
+  advanceAmount Float         @default(0)
+  advanceDate   DateTime?     @db.Date
+  advanceSplit  Json
+  balanceAmount Float         @default(0)
+  balanceStatus BalanceStatus @default(pending)
+  balanceSplit  Json
+  balanceRecvAt DateTime?     @db.Date
+  notes         String?
+  createdById   String?
+  createdBy     Staff?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([date])
+  @@index([balanceStatus])
+  @@map("income_day")
+}
+
+model IncomeOvernight {
+  id            String        @id @default(cuid())
+  checkIn       DateTime      @db.Date
+  nights        Int           @default(1)
+  unitId        String
+  unitName      String
+  capacity      Int
+  baseRate      Float
+  paxBelow5     Int           @default(0)
+  pax5to10      Int           @default(0)
+  paxAbove10    Int           @default(0)
+  totalPax      Int
+  manualExtra   Boolean       @default(false)
+  extraBelow5   Int           @default(0)
+  extra5to10    Int           @default(0)
+  extraAbove10  Int           @default(0)
+  baseAmount    Float
+  extraCharge   Float
+  totalAmount   Float
+  foodCostValue Float
+  roomRevenue   Float
+  meals         Json
+  advanceAmount Float         @default(0)
+  advanceDate   DateTime?     @db.Date
+  advanceSplit  Json
+  balanceAmount Float         @default(0)
+  balanceStatus BalanceStatus @default(pending)
+  balanceSplit  Json
+  balanceRecvAt DateTime?     @db.Date
+  notes         String?
+  createdById   String?
+  createdBy     Staff?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([checkIn])
+  @@index([balanceStatus])
+  @@map("income_overnight")
+}
+
+model IncomeStore {
+  id          String   @id @default(cuid())
+  date        DateTime @db.Date
+  itemId      String?
+  itemName    String
+  qty         Int      @default(1)
+  unitPrice   Float
+  amount      Float
+  method      String
+  notes       String?
+  createdById String?
+  createdBy   Staff?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@index([date])
+  @@map("income_store")
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  date        DateTime @db.Date
+  primary     String
+  sub         String?
+  amount      Float
+  method      String
+  vendor      String?
+  description String?
+  createdById String?
+  createdBy   Staff?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@index([date])
+  @@index([primary])
+  @@map("expenses")
+}
