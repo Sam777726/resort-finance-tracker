@@ -1,7 +1,8 @@
 # Camp Dilly Ledger — Platform Edition
 
-A full-stack rebuild of the [Camp Dilly Ledger](../camp-dilly-ledger) resort
-income/expenditure tracker, this time built to demonstrate a real
+A full-stack rebuild of a simpler vanilla-JS Camp Dilly Ledger resort
+income/expenditure tracker (a separate, earlier project, not included in
+this repo), this time built to demonstrate a real
 system-design toolkit rather than to be the simplest thing that works: a
 typed monorepo, a normalized relational schema, two different caching
 strategies applied where they actually fit, a background job queue, and
@@ -54,7 +55,7 @@ flowchart LR
 
 | Piece | Why it's here for *this* app |
 |---|---|
-| **NestJS + TypeScript** | Modular DI, guards, and interceptors replace a lot of the hand-rolled middleware the [vanilla build](../camp-dilly-ledger) had to write itself — genuinely less code for the same behavior once you're past the framework's setup cost. |
+| **NestJS + TypeScript** | Modular DI, guards, and interceptors replace a lot of the hand-rolled middleware the earlier vanilla-JS build had to write itself — genuinely less code for the same behavior once you're past the framework's setup cost. |
 | **PostgreSQL + Prisma** | Real relational storage with indexes on the columns reports actually filter by (`date`, `balanceStatus`, `primary` category), JSONB for the genuinely nested bits (meal counts, payment splits). Migrations are the "right" way to evolve this schema — see the honesty note below on why this repo ships without a committed migration history. |
 | **Redis — cache-aside for `/settings`** | Settings barely change but get read on every page load. Cached with a long TTL, invalidated explicitly on write (`cache.del` the moment an admin saves) — a write must never leave stale data to be read back. |
 | **Redis — TTL-only cache for `/reports/summary`** | A different consistency need, a different strategy: reports tolerate ~60s of staleness fine, so this cache just expires rather than being explicitly invalidated on every booking write (which would mean recomputing an aggregate query on every single mutation). Two caches, two policies, chosen for what each read actually needs — not the same cache shape copy-pasted twice. |
