@@ -7,7 +7,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "test": "jest",
     "lint": "tsc --noEmit"
   },
   "devDependencies": {
