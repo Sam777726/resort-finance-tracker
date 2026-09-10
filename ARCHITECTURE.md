@@ -22,6 +22,7 @@ document is the structural map; the README is the design rationale.
 13. [Frontend: React architecture](#13-frontend-react-architecture)
 14. [Shared package](#14-shared-package-camp-dillyshared)
 15. [Build & deployment](#15-build--deployment)
+    - [15.4 Production deployment](#154-production-deployment)
 
 ---
 
@@ -33,7 +34,7 @@ document is the structural map; the README is the design rationale.
 | Backend framework | NestJS 10 (TypeScript) | Modular DI container; every feature is a `Module` of `Controller` + `Service` + `DTO`s. |
 | Database | PostgreSQL 16 | System of record. Relational columns for anything reports filter/sort/aggregate on; JSONB for genuinely nested data. |
 | ORM | Prisma 5 | Schema-first models, migrations tooling, type-safe query builder, `groupBy`/`aggregate` for reporting. |
-| Cache / broker | Redis 7 | Four distinct roles — see [§8](#8-caching-architecture): HTTP response cache-aside, refresh-token store, rate-limit counters, BullMQ's job store. |
+| Cache / broker | Redis 7 | Four distinct roles — see [§8](#8-caching-architecture): HTTP response cache-aside, refresh-token store, rate-limit counters, BullMQ's job store. Password-protected (`--requirepass`) and bound to `127.0.0.1` in every compose profile — no default, no anonymous access, ever. |
 | Job queue | BullMQ | Background report-cache warming, decoupled from the request/response cycle. |
 | Scheduling | `@nestjs/schedule` | Cron trigger for the nightly cache-warm job. |
 | Realtime | Socket.IO (`@nestjs/websockets`) | Broadcast-only "something changed" signal so open dashboards refresh without polling. |
@@ -50,7 +51,8 @@ document is the structural map; the README is the design rationale.
 | Charts | Recharts | Donut and trend charts on Dashboard/Reports. |
 | Containerization | Docker (multi-stage) + Docker Compose | `docker compose up --build` builds and runs all four services with health-gated startup order. |
 | Reverse proxy | nginx | Serves the built SPA and proxies `/api` and `/live` to the API container in the production compose profile. |
-| CI | GitHub Actions | Spins up real Postgres + Redis service containers, then build+test+lint both apps. |
+| CI | GitHub Actions | Spins up real Postgres + Redis service containers, then build+test+lint both apps. A second workflow builds and publishes Docker images to GHCR on every push to `main` — see [§15.4](#154-production-deployment). |
+| Image registry | GitHub Container Registry (GHCR) | Production images are built in CI, not on the server — the target VPS has no spare RAM for `npm install`/`tsc`/`vite build`. |
 
 ---
 
@@ -791,3 +793,59 @@ install, build `packages/shared`, test `packages/shared`, generate the
 Prisma client, `prisma db push` against the CI Postgres, build + lint the
 API, build + lint the web app. No mocking of Postgres/Redis in CI — the
 same real-dependency philosophy as local Docker Compose.
+
+### 15.4 Production deployment
+
+`docker-compose.yml` (§15.2) is a **dev/showcase** profile: it builds both
+images locally with `build:`. A live server can't do that — the cheapest
+reliable VPS for this workload has 1GB RAM and no swap by default, and a
+`tsc`/`vite build` step would OOM it. Production instead splits the build
+and run steps across two different places:
+
+```mermaid
+flowchart LR
+    subgraph CI["GitHub Actions (.github/workflows/publish.yml)"]
+        Push["push to main"] --> Build["docker/build-push-action<br/>(matrix: api, web)"]
+    end
+    GHCR[("ghcr.io/<owner>/<br/>resort-finance-tracker-{api,web}<br/>:latest + :sha")]
+    subgraph Server["Production host"]
+        Pull["docker compose -f docker-compose.prod.yml pull"]
+        Up["docker compose -f docker-compose.prod.yml up -d"]
+    end
+
+    Build -- "push" --> GHCR
+    GHCR -- "pull (no build)" --> Pull --> Up
+```
+
+**`.github/workflows/publish.yml`** — matrix job, one build per image,
+pushed to GHCR tagged `:latest` and `:<commit-sha>`. GHCR requires
+lowercase image names; `github.repository_owner` isn't guaranteed
+lowercase, so a shell step computes it (`${GITHUB_REPOSITORY_OWNER,,}`)
+rather than relying on a GitHub Actions expression, which has no built-in
+case conversion.
+
+**`docker-compose.prod.yml`** — a standalone file, not a Compose
+*override* merged with the base `docker-compose.yml`. A service that goes
+from `build:` (base file) to `image:` (override) has subtle Compose merge
+semantics; duplicating the ~80 lines here is safer than getting that merge
+wrong on a live server. Differences from the dev profile:
+
+| | `docker-compose.yml` (dev) | `docker-compose.prod.yml` |
+|---|---|---|
+| `api` / `web` | `build:` from local source | `image: ghcr.io/.../*:latest` — pulled, never built |
+| Secrets | from a repo-root `.env` (gitignored) | from a `.env` generated directly **on the server** (`openssl rand -hex 32`, `chmod 600`) — never present on any dev machine |
+| `web` port | `8080:80` | `${WEB_PORT:-80}:80` |
+| Postgres / Redis | `127.0.0.1`-only, `REDIS_PASSWORD` required | identical — production doesn't relax anything dev already hardened |
+
+Server-side deploy is two commands: `docker compose pull` (fetches the
+four images — Postgres/Redis from Docker Hub, api/web from GHCR) then
+`docker compose up -d`. No `npm`, no compiler, ever touches the
+production host.
+
+**Host**: a small DigitalOcean droplet in an India-region datacenter —
+picked for predictable low cost and no free-tier capacity risk (Oracle's
+Always Free tier and Render's free tier were both considered and rejected
+for this reason) on a workload that's genuinely low-traffic (one resort's
+front desk). SSH access uses a dedicated ed25519 deploy keypair, not a
+password. UFW allows only 22/80/443. The public IP is intentionally not
+recorded in this repo.

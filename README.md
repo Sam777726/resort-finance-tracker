@@ -65,7 +65,7 @@ flowchart LR
 | **WebSocket gateway (`/live`)** | When one staff member logs a booking, every other open dashboard updates within a second instead of needing a manual refresh — genuinely useful for a front desk with more than one device. Deliberately unauthenticated and broadcast-only: it carries event *names* ("a booking changed"), never booking data, so there's nothing on that channel worth protecting — the actual data still comes from the guarded REST API. |
 | **React + Vite + TypeScript** | TanStack Query owns server state (cache, retries, invalidation) instead of hand-rolled `reload()` calls; Zustand holds the small bit of client state (the in-memory access token); React Hook Form + Zod validate the straightforward field forms; the booking forms with live-computed totals use plain `useState` instead — the derived-state-heavy calculator UI isn't what RHF is for, and using it there anyway would've been the wrong tool for the sake of using it everywhere. |
 | **`packages/shared`** | The pricing/meal-count math (`computeDayPicnic`, `computeOvernight`) is a single TypeScript module imported by both the API (authoritative, recomputes on every save) and the web app (instant live preview as the pax steppers are tapped). One implementation, ten Jest tests, no chance of the client's preview and the server's saved number silently drifting apart. |
-| **Docker Compose** | `docker compose up` gets you Postgres + Redis + the API + the built web app in one shot — see honesty note on what I could/couldn't verify below. |
+| **Docker Compose** | `docker compose up` gets you Postgres + Redis + the API + the built web app in one shot — see honesty note on what I could/couldn't verify below. Postgres and Redis are bound to `127.0.0.1` only (never `0.0.0.0`) and Redis requires a password (`--requirepass`, enforced via `${REDIS_PASSWORD:?...}` with no default) — the only port meant to be reachable from outside the host is the web app's. |
 
 ## Project layout
 
@@ -116,6 +116,50 @@ npx prisma db push --skip-generate -w apps/api   # or: cd apps/api && npx prisma
 npm run dev:api     # NestJS on :4000, restarts on change
 npm run dev:web     # Vite on :5173, proxies /api and /live to :4000
 ```
+
+## Deploying it for real
+
+This app is actually running in production for a real resort — not just a
+`docker compose up --build` on a laptop. That's a different deployment
+shape, because a live server can't afford to `npm install`/`tsc`/`vite
+build` on every deploy (the cheapest reliable VPS for this workload is
+1GB RAM with no swap by default — a build step would OOM it), and secrets
+can't live in a file that gets `git push`ed.
+
+**`.github/workflows/publish.yml`** builds both Docker images (`api` and
+`web`) and pushes them to GitHub Container Registry on every push to
+`main`, tagged both `:latest` and `:<commit-sha>`. The server never builds
+anything — it only ever pulls.
+
+**`docker-compose.prod.yml`** is a standalone production compose file
+(deliberately *not* a Compose override merged with `docker-compose.yml` —
+the merge semantics for a service that goes from `build:` to `image:`
+across files are subtle enough that getting it wrong on a live server is
+worse than the small duplication). It points `api`/`web` at the GHCR
+images instead of building locally, keeps Postgres/Redis on
+`127.0.0.1`-only with the same mandatory `REDIS_PASSWORD`, and reads all
+secrets from a `.env` file that's generated directly on the server
+(`openssl rand -hex 32`, `chmod 600`) — never committed, never copied
+from a dev machine.
+
+Deploy flow, once a droplet exists with Docker installed:
+
+```bash
+# on the server, one-time setup
+mkdir -p /opt/resort-tracker && cd /opt/resort-tracker
+# generate a real .env here (POSTGRES_PASSWORD, REDIS_PASSWORD,
+# JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, WEB_ORIGIN, GHCR_OWNER)
+
+# copy docker-compose.prod.yml to the server as docker-compose.yml, then:
+docker compose pull      # pulls pre-built images from GHCR, no build step
+docker compose up -d     # starts postgres, redis, api, web
+```
+
+Chosen host: a small DigitalOcean droplet in an India-region datacenter
+(cheapest reliable option with predictable pricing and no free-tier
+capacity risk, for a low-traffic single-resort front-desk tool) — see
+[ARCHITECTURE.md §15.4](./ARCHITECTURE.md#154-production-deployment) for
+the full picture. The public IP itself isn't published in this repo.
 
 ## Honesty note — what I actually verified
 
