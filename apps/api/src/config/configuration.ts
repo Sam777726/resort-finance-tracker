@@ -2,7 +2,7 @@ export interface AppConfig {
   nodeEnv: string;
   port: number;
   databaseUrl: string;
-  redis: { host: string; port: number };
+  redis: { host: string; port: number; password?: string };
   jwt: {
     accessSecret: string;
     accessTtl: string;
@@ -19,6 +19,7 @@ export default (): AppConfig => ({
   redis: {
     host: process.env.REDIS_HOST ?? 'localhost',
     port: parseInt(process.env.REDIS_PORT ?? '6379', 10),
+    password: process.env.REDIS_PASSWORD || undefined,
   },
   jwt: {
     accessSecret: process.env.JWT_ACCESS_SECRET ?? 'dev-access-secret',

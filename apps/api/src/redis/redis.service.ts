@@ -20,6 +20,7 @@ export class RedisService implements OnModuleDestroy {
     this.client = new Redis({
       host: config.get('redis.host', { infer: true }),
       port: config.get('redis.port', { infer: true }),
+      password: config.get('redis.password', { infer: true }),
       maxRetriesPerRequest: 2,
       retryStrategy: (times) => Math.min(times * 200, 2000),
       lazyConnect: false,

@@ -28,7 +28,11 @@ import { HealthModule } from './health/health.module';
     BullModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService<AppConfig, true>) => ({
-        connection: { host: config.get('redis.host', { infer: true }), port: config.get('redis.port', { infer: true }) },
+        connection: {
+          host: config.get('redis.host', { infer: true }),
+          port: config.get('redis.port', { infer: true }),
+          password: config.get('redis.password', { infer: true }),
+        },
       }),
       inject: [ConfigService],
     }),

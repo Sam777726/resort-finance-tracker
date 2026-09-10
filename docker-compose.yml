@@ -6,8 +6,15 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-campdilly}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env — copy .env.example to .env first}
       POSTGRES_DB: ${POSTGRES_DB:-campdilly}
+    # Bound to 127.0.0.1 only, not 0.0.0.0: nothing outside this machine
+    # needs to reach Postgres directly — only the `api` container does,
+    # over Docker's internal network, which doesn't go through this
+    # mapping at all. On a real VPS this is the difference between
+    # "reachable only via SSH tunnel from this box" and "reachable by
+    # anyone who port-scans the public IP." Host-side tools (psql, a GUI
+    # client) on this same machine can still reach localhost:5432 as before.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
@@ -19,10 +26,17 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    # Redis has no auth by default — anyone who could reach this port had
+    # full read/write access to cached data, refresh tokens, and rate-limit
+    # state with zero credentials. Both the password AND the localhost-only
+    # binding below are needed: the password protects it even if a future
+    # config change reopens the port; the binding is what actually stops
+    # the internet from reaching it today.
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env — copy .env.example to .env first}"]
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping | grep -q PONG"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -41,6 +55,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-campdilly}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-campdilly}?schema=public
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env — copy .env.example to .env first}
       # No default for either JWT secret — a silently-empty secret is worse
       # than a loud failure. `docker compose` refuses to start if these
       # aren't set, rather than falling back to something guessable.
@@ -49,8 +64,13 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Set JWT_REFRESH_SECRET in .env — copy .env.example to .env and fill it in (see README)}
       JWT_REFRESH_TTL_SECONDS: ${JWT_REFRESH_TTL_SECONDS:-604800}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8080}
+    # Also localhost-only: in production the `web` container reaches this
+    # over the internal Docker network via nginx's reverse proxy (see
+    # apps/web/nginx.conf) — nothing needs to hit :4000 from outside this
+    # machine. Kept on localhost (not removed entirely) so Swagger docs
+    # and direct API testing from this machine still work during setup.
     ports:
-      - "4000:4000"
+      - "127.0.0.1:4000:4000"
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:4000/api/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
       interval: 10s
@@ -64,6 +84,9 @@ services:
     restart: unless-stopped
     depends_on:
       - api
+    # This one stays open to 0.0.0.0 deliberately — it's the actual
+    # front door: the nginx-served SPA + reverse-proxied API/WebSocket
+    # traffic your reception desk and you are meant to reach from anywhere.
     ports:
       - "8080:80"
 

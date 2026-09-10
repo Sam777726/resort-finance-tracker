@@ -28,6 +28,7 @@ import type { AppConfig } from '../config/configuration';
         store: await redisStore({
           host: config.get('redis.host', { infer: true }),
           port: config.get('redis.port', { infer: true }),
+          password: config.get('redis.password', { infer: true }),
         }),
         ttl: 60_000, // default 60s; individual callers override per key
       }),
