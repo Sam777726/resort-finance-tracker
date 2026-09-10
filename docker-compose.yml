@@ -3,15 +3,15 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: campdilly
-      POSTGRES_PASSWORD: campdilly
-      POSTGRES_DB: campdilly
+      POSTGRES_USER: ${POSTGRES_USER:-campdilly}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env — copy .env.example to .env first}
+      POSTGRES_DB: ${POSTGRES_DB:-campdilly}
     ports:
       - "5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U campdilly"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-campdilly}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -38,14 +38,17 @@ services:
     environment:
       NODE_ENV: production
       PORT: 4000
-      DATABASE_URL: postgresql://campdilly:campdilly@postgres:5432/campdilly?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER:-campdilly}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-campdilly}?schema=public
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      JWT_ACCESS_SECRET: dev-access-secret-change-me
-      JWT_ACCESS_TTL: 15m
-      JWT_REFRESH_SECRET: dev-refresh-secret-change-me
-      JWT_REFRESH_TTL_SECONDS: 604800
-      WEB_ORIGIN: http://localhost:8080
+      # No default for either JWT secret — a silently-empty secret is worse
+      # than a loud failure. `docker compose` refuses to start if these
+      # aren't set, rather than falling back to something guessable.
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?Set JWT_ACCESS_SECRET in .env — copy .env.example to .env and fill it in (see README)}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Set JWT_REFRESH_SECRET in .env — copy .env.example to .env and fill it in (see README)}
+      JWT_REFRESH_TTL_SECONDS: ${JWT_REFRESH_TTL_SECONDS:-604800}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8080}
     ports:
       - "4000:4000"
     healthcheck:
