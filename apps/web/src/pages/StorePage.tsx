@@ -82,7 +82,7 @@ export function StorePage() {
                     <td className="py-2 px-2 mono text-right">{fmt(r.amount)}</td>
                     <td className="py-2 px-2">{r.method}</td>
                     <td className="py-2 px-2">
-                      <button onClick={() => { if (confirm('Delete this sale?')) del.mutate(r.id, { onSuccess: () => toast('Deleted') }); }} className="p-1 text-inkdim hover:bg-surface2 rounded">🗑</button>
+                      <button onClick={() => { if (confirm('Delete this sale?')) del.mutate(r.id, { onSuccess: () => toast('Deleted') }); }} className="p-2.5 -m-1 text-inkdim hover:bg-surface2 rounded">🗑</button>
                     </td>
                   </tr>
                 ))}
