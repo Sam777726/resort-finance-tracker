@@ -82,13 +82,15 @@ export function ExpensesPage() {
 
       <Card className="p-4">
         <div className="flex gap-2.5 mb-3 flex-wrap">
-          <Select value={filter.category} onChange={(e) => setFilter((f) => ({ ...f, category: e.target.value }))}>
-            <option value="">All categories</option>
-            {categories.map((c) => <option key={c}>{c}</option>)}
-          </Select>
-          <Input type="date" value={filter.from} onChange={(e) => setFilter((f) => ({ ...f, from: e.target.value }))} />
-          <Input type="date" value={filter.to} onChange={(e) => setFilter((f) => ({ ...f, to: e.target.value }))} />
-          <Button variant="secondary" size="sm" onClick={() => setFilter({ from: '', to: '', category: '' })}>Clear</Button>
+          <Field label="Category">
+            <Select value={filter.category} onChange={(e) => setFilter((f) => ({ ...f, category: e.target.value }))}>
+              <option value="">All categories</option>
+              {categories.map((c) => <option key={c}>{c}</option>)}
+            </Select>
+          </Field>
+          <Field label="From"><Input type="date" value={filter.from} onChange={(e) => setFilter((f) => ({ ...f, from: e.target.value }))} /></Field>
+          <Field label="To"><Input type="date" value={filter.to} onChange={(e) => setFilter((f) => ({ ...f, to: e.target.value }))} /></Field>
+          <Button variant="secondary" size="sm" className="self-end" onClick={() => setFilter({ from: '', to: '', category: '' })}>Clear</Button>
         </div>
         {rows.length === 0 ? (
           <div className="text-center py-8 text-inkdim text-sm">No expenses logged yet.</div>
