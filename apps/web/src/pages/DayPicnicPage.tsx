@@ -81,9 +81,9 @@ export function DayPicnicPage() {
 
       <Card className="p-4">
         <div className="flex gap-2.5 mb-3 flex-wrap">
-          <Input type="date" value={filter.from} onChange={(e) => setFilter((f) => ({ ...f, from: e.target.value }))} />
-          <Input type="date" value={filter.to} onChange={(e) => setFilter((f) => ({ ...f, to: e.target.value }))} />
-          <Button variant="secondary" size="sm" onClick={() => setFilter({ from: '', to: '' })}>Clear</Button>
+          <Field label="From"><Input type="date" value={filter.from} onChange={(e) => setFilter((f) => ({ ...f, from: e.target.value }))} /></Field>
+          <Field label="To"><Input type="date" value={filter.to} onChange={(e) => setFilter((f) => ({ ...f, to: e.target.value }))} /></Field>
+          <Button variant="secondary" size="sm" className="self-end" onClick={() => setFilter({ from: '', to: '' })}>Clear</Button>
         </div>
         {rows.length === 0 ? (
           <div className="text-center py-8 text-inkdim text-sm">No day picnic entries yet.</div>
