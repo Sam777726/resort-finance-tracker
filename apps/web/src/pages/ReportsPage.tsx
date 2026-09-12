@@ -6,6 +6,8 @@ import { Button } from '../components/ui/Button';
 import { RangeBar } from '../components/ui/RangeBar';
 import { DonutChart } from '../components/charts/DonutChart';
 import { toast } from '../store/toastStore';
+import { apiErrorMessage } from '../lib/api';
+import { useAuthStore } from '../store/authStore';
 
 const fmt = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
 
@@ -31,8 +33,21 @@ export function ReportsPage() {
   const { from, to } = computeRange(preset, custom);
   const { data: summary, isLoading, refetch } = useReportSummary(from, to);
   const recompute = useRecomputeReport();
+  const isAdmin = useAuthStore((s) => s.user?.role === 'admin');
 
   if (isLoading || !summary) return <div className="text-inkdim text-sm">Loading…</div>;
+
+  // POST /reports/recompute is admin-only (see ReportsController) — hidden
+  // for staff rather than shown-but-silently-403ing on click.
+  const runRecompute = async () => {
+    try {
+      await recompute.mutateAsync({ from, to });
+      toast('Recompute queued — refresh in a moment');
+      setTimeout(refetch, 1500);
+    } catch (err) {
+      toast(apiErrorMessage(err));
+    }
+  };
 
   const profit = summary.income.grandTotal - summary.expenses.total;
   const foodCostPct = summary.income.foodCostValue > 0 ? (summary.expenses.kitchenTotal / summary.income.foodCostValue) * 100 : 0;
@@ -62,12 +77,11 @@ export function ReportsPage() {
           <div className="text-inkdim text-sm">{from} – {to}{summary.cached && <span className="text-accentstrong"> · served from cache</span>}</div>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Button
-            variant="secondary" size="sm"
-            onClick={async () => { await recompute.mutateAsync({ from, to }); toast('Recompute queued — refresh in a moment'); setTimeout(refetch, 1500); }}
-          >
-            Recompute (background job)
-          </Button>
+          {isAdmin && (
+            <Button variant="secondary" size="sm" onClick={runRecompute} disabled={recompute.isPending}>
+              Recompute (background job)
+            </Button>
+          )}
           <Button variant="secondary" size="sm" onClick={exportCsv}>Export CSV</Button>
         </div>
       </div>

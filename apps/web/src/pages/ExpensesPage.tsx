@@ -113,7 +113,7 @@ export function ExpensesPage() {
                     <td className="py-2 px-2">{r.method}</td>
                     <td className="py-2 px-2">{r.description || r.vendor || '—'}</td>
                     <td className="py-2 px-2">
-                      <button onClick={() => { if (confirm('Delete this expense?')) del.mutate(r.id, { onSuccess: () => toast('Deleted') }); }} className="p-2.5 -m-1 text-inkdim hover:bg-surface2 rounded">🗑</button>
+                      <button onClick={() => { if (confirm('Delete this expense?')) del.mutate(r.id, { onSuccess: () => toast('Deleted'), onError: (err) => toast(apiErrorMessage(err)) }); }} className="p-2.5 -m-1 text-inkdim hover:bg-surface2 rounded">🗑</button>
                     </td>
                   </tr>
                 ))}

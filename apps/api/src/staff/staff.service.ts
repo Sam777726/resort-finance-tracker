@@ -35,13 +35,22 @@ export class StaffService {
   }
 
   async remove(id: string) {
+    const target = await this.prisma.staff.findUnique({ where: { id } });
+    if (!target) throw new NotFoundException('Staff member not found');
+
     const count = await this.prisma.staff.count();
     if (count <= 1) throw new BadRequestException('Cannot remove the last staff member');
-    try {
-      await this.prisma.staff.delete({ where: { id } });
-    } catch {
-      throw new NotFoundException('Staff member not found');
+
+    // Settings, staff management, and report recompute are all
+    // admin-only — removing the last admin while staff accounts remain
+    // would permanently lock the resort out of all three with no way
+    // back in short of a direct database edit.
+    if (target.role === 'admin') {
+      const adminCount = await this.prisma.staff.count({ where: { role: 'admin' } });
+      if (adminCount <= 1) throw new BadRequestException('Cannot remove the last admin — add another admin account first');
     }
+
+    await this.prisma.staff.delete({ where: { id } });
     await this.redis.revokeRefreshToken(id);
     return { ok: true };
   }

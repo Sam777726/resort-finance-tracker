@@ -131,7 +131,7 @@ function RowActions({ entry, onEdit }: { entry: DayEntry; onEdit: () => void }) 
     <div className="flex gap-1.5">
       <button onClick={onEdit} className="p-2.5 -m-1 text-inkdim hover:bg-surface2 rounded" title="Edit">✎</button>
       <button
-        onClick={() => { if (confirm('Delete this entry?')) del.mutate(entry.id, { onSuccess: () => toast('Entry deleted') }); }}
+        onClick={() => { if (confirm('Delete this entry?')) del.mutate(entry.id, { onSuccess: () => toast('Entry deleted'), onError: (err) => toast(apiErrorMessage(err)) }); }}
         className="p-2.5 -m-1 text-inkdim hover:bg-surface2 rounded"
         title="Delete"
       >
