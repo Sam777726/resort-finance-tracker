@@ -160,7 +160,20 @@ function DayForm({
       : blankDraft(packages[0]?.id ?? ''),
   );
 
-  const pkg = packages.find((p) => p.id === draft.packageId) ?? packages[0];
+  const livePkg = packages.find((p) => p.id === draft.packageId) ?? packages[0];
+  // Mirrors income-day.service.ts's buildPayload: editing an entry
+  // without changing which package is selected must preview (and, on
+  // save, actually charge) the rate that was in effect when it was
+  // booked, not whatever Settings says today — otherwise this preview
+  // would show a total the save doesn't actually produce. Memoized (not
+  // just a plain conditional) so this object keeps a stable reference
+  // across renders where its inputs haven't changed — otherwise every
+  // render would fabricate a new object and defeat the computed useMemo
+  // below entirely.
+  const pkg = useMemo(
+    () => (initial && initial.packageId === draft.packageId ? { ...livePkg, rate: initial.rate } : livePkg),
+    [initial, draft.packageId, livePkg],
+  );
   const computed = useMemo(
     () => computeDayPicnic(draft, pkg, settings.general.walkInSurcharge),
     [draft, pkg, settings.general.walkInSurcharge],

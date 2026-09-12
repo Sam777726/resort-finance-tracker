@@ -73,8 +73,8 @@ export class IncomeDayService {
   }
 
   async update(id: string, dto: CreateDayEntryDto) {
-    await this.assertExists(id);
-    const payload = await this.buildPayload(dto);
+    const existing = await this.assertExists(id);
+    const payload = await this.buildPayload(dto, existing);
     const row = await this.prisma.incomeDay.update({ where: { id }, data: payload });
     this.events.broadcast(LIVE_EVENTS.DAY_CHANGED);
     return toJson(row);
@@ -111,14 +111,24 @@ export class IncomeDayService {
   /** Server-side recompute is the authoritative one — the client sends raw
    * pax counts and a package id, never the amount; this is what stops a
    * tampered client request from writing an arbitrary price. */
-  private async buildPayload(dto: CreateDayEntryDto) {
+  private async buildPayload(dto: CreateDayEntryDto, existing?: IncomeDay) {
     const bundle = await this.settings.getBundle();
     const packages = (bundle.day_packages as { items: DayPackage[] }).items;
     const pkg = packages.find((p) => p.id === dto.packageId) ?? packages[0];
     if (!pkg) throw new BadRequestException('No day packages configured');
     const walkInSurcharge = (bundle.general as { walkInSurcharge: number }).walkInSurcharge;
 
-    const { totalPax, amount, discountAmount, meals } = computeDayPicnic(dto, pkg, walkInSurcharge);
+    // Editing an existing entry must never silently reprice it just
+    // because Settings' rate list moved on since it was booked — the rate
+    // is what was actually agreed with the guest. Only switching to a
+    // *different* package is treated as a deliberate reprice; pax count,
+    // discount, and everything else still recompute normally, just
+    // against the original rate rather than whatever the package charges
+    // today. `create` never passes `existing`, so new bookings are
+    // unaffected and always price at today's rate.
+    const effectivePkg = existing && existing.packageId === dto.packageId ? { ...pkg, rate: existing.rate } : pkg;
+
+    const { totalPax, amount, discountAmount, meals } = computeDayPicnic(dto, effectivePkg, walkInSurcharge);
     if (totalPax === 0) throw new BadRequestException('Add at least 1 pax');
 
     const partial = dto.partial;
@@ -129,7 +139,7 @@ export class IncomeDayService {
       date: new Date(dto.date),
       packageId: pkg.id,
       packageLabel: pkg.label,
-      rate: pkg.rate,
+      rate: effectivePkg.rate,
       walkIn: dto.walkIn,
       tentId: dto.tentId ?? '',
       tentName: dto.tentName ?? '',
