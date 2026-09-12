@@ -39,6 +39,15 @@ function ProtectedRoute({ children }: { children: React.ReactElement }) {
   return children;
 }
 
+// The API rejects every settings write from a non-admin with a 403 — this
+// stops a staff account from reaching a page of inputs that look editable
+// but can never actually save, not just hiding the nav link to it.
+function RequireAdmin({ children }: { children: React.ReactElement }) {
+  const role = useAuthStore((s) => s.user?.role);
+  if (role !== 'admin') return <Navigate to="/" replace />;
+  return children;
+}
+
 export function App() {
   const ready = useAuthBootstrap();
   if (!ready) {
@@ -63,7 +72,7 @@ export function App() {
           <Route path="/expenses" element={<ExpensesPage />} />
           <Route path="/payments" element={<PaymentsPage />} />
           <Route path="/reports" element={<ReportsPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings" element={<RequireAdmin><SettingsPage /></RequireAdmin>} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
