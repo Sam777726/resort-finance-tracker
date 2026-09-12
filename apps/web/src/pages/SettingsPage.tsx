@@ -8,6 +8,14 @@ import { Field, Input, Select } from '../components/ui/Field';
 import { toast } from '../store/toastStore';
 import { apiErrorMessage } from '../lib/api';
 
+// Every "Save" mutation in this file needs this — without an onError, a
+// failed save (an expired session, a staff account the API 403s, a
+// dropped connection) fails completely silently: the button just does
+// nothing, which looks identical to a successful save until the next
+// reload shows the old values. Centralized so it can't be forgotten
+// per-tab going forward.
+const onSaveError = (err: unknown) => toast(apiErrorMessage(err, 'Could not save — check your connection and try again'));
+
 const uid = () => 'id_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 const TABS = [
@@ -61,7 +69,7 @@ function GeneralTab({ settings }: { settings: Settings }) {
         <Field label="Walk-in Surcharge / Pax (₹)"><Input type="number" value={g.walkInSurcharge} onChange={(e) => setG((v) => ({ ...v, walkInSurcharge: Number(e.target.value) || 0 }))} /></Field>
       </div>
       <div className="flex justify-end">
-        <Button onClick={() => update.mutate({ key: 'general', value: g }, { onSuccess: () => toast('Saved') })}>Save</Button>
+        <Button onClick={() => update.mutate({ key: 'general', value: g }, { onSuccess: () => toast('Saved'), onError: onSaveError })} disabled={update.isPending}>Save</Button>
       </div>
     </Card>
   );
@@ -101,7 +109,7 @@ function PackagesTab({ settings }: { settings: Settings }) {
         <Button variant="secondary" size="sm" onClick={() => setItems((arr) => [...arr, { id: uid(), label: 'New Package', rate: 0, meals: { B: 0, L: 0, H: 0, D: 0 } }])}>
           + Add Package
         </Button>
-        <Button onClick={() => update.mutate({ key: 'day_packages', value: { items } }, { onSuccess: () => toast('Packages saved') })}>Save All</Button>
+        <Button onClick={() => update.mutate({ key: 'day_packages', value: { items } }, { onSuccess: () => toast('Packages saved'), onError: onSaveError })} disabled={update.isPending}>Save All</Button>
       </div>
     </Card>
   );
@@ -127,7 +135,7 @@ function UnitsTab({ settings }: { settings: Settings }) {
       ))}
       <div className="flex justify-between">
         <Button variant="secondary" size="sm" onClick={() => setItems((arr) => [...arr, { id: uid(), name: 'New Type', category: '', capacity: 2, rate: 0 }])}>+ Add Type</Button>
-        <Button onClick={() => update.mutate({ key: 'tent_types', value: { items } }, { onSuccess: () => toast('Saved') })}>Save All</Button>
+        <Button onClick={() => update.mutate({ key: 'tent_types', value: { items } }, { onSuccess: () => toast('Saved'), onError: onSaveError })} disabled={update.isPending}>Save All</Button>
       </div>
     </Card>
   );
@@ -144,7 +152,7 @@ function ExtraTab({ settings }: { settings: Settings }) {
         <Field label="Above 10 yrs"><Input type="number" value={r.above10} onChange={(e) => setR((v) => ({ ...v, above10: Number(e.target.value) || 0 }))} /></Field>
       </div>
       <div className="text-xs text-inkdim">Applies to overnight guests beyond a unit&apos;s base capacity, charged per night.</div>
-      <div className="flex justify-end"><Button onClick={() => update.mutate({ key: 'extra_person_rates', value: r }, { onSuccess: () => toast('Saved') })}>Save</Button></div>
+      <div className="flex justify-end"><Button onClick={() => update.mutate({ key: 'extra_person_rates', value: r }, { onSuccess: () => toast('Saved'), onError: onSaveError })} disabled={update.isPending}>Save</Button></div>
     </Card>
   );
 }
@@ -165,7 +173,7 @@ function StoreItemsTab({ settings }: { settings: Settings }) {
       ))}
       <div className="flex justify-between">
         <Button variant="secondary" size="sm" onClick={() => setItems((arr) => [...arr, { id: uid(), name: 'New Item', price: 0 }])}>+ Add Item</Button>
-        <Button onClick={() => update.mutate({ key: 'store_items', value: { items } }, { onSuccess: () => toast('Saved') })}>Save All</Button>
+        <Button onClick={() => update.mutate({ key: 'store_items', value: { items } }, { onSuccess: () => toast('Saved'), onError: onSaveError })} disabled={update.isPending}>Save All</Button>
       </div>
     </Card>
   );
@@ -177,9 +185,23 @@ function CategoriesTab({ settings }: { settings: Settings }) {
   const [newSub, setNewSub] = useState<Record<string, string>>({});
   const update = useUpdateSetting();
 
-  const persist = (next: Record<string, string[]>) => {
+  // Optimistic (the UI updates instantly on every tap — add/remove
+  // category/sub-category happen constantly here and waiting on a
+  // round-trip for each would feel sluggish), but that means a failed
+  // save needs an explicit rollback: without it, a rejected request (an
+  // expired session, a non-admin somehow reaching this page) would leave
+  // the screen showing a change that was never actually saved, which is
+  // worse than not optimistic-updating at all — it looks like it worked.
+  const persist = (next: Record<string, string[]>, successMessage?: string) => {
+    const previous = cats;
     setCats(next);
-    update.mutate({ key: 'expense_categories', value: { categories: next } });
+    update.mutate(
+      { key: 'expense_categories', value: { categories: next } },
+      {
+        onSuccess: () => { if (successMessage) toast(successMessage); },
+        onError: (err) => { setCats(previous); onSaveError(err); },
+      },
+    );
   };
 
   return (
@@ -213,7 +235,7 @@ function CategoriesTab({ settings }: { settings: Settings }) {
         <Input placeholder="New primary category name" value={newCat} onChange={(e) => setNewCat(e.target.value)} />
         <Button
           size="sm" variant="secondary"
-          onClick={() => { if (newCat.trim()) { persist({ ...cats, [newCat.trim()]: ['Other'] }); setNewCat(''); toast('Category added'); } }}
+          onClick={() => { if (newCat.trim()) { persist({ ...cats, [newCat.trim()]: ['Other'] }, 'Category added'); setNewCat(''); } }}
         >
           + Add Category
         </Button>
@@ -237,7 +259,7 @@ function BudgetsTab({ settings }: { settings: Settings }) {
         ))}
       </div>
       <div className="flex justify-end">
-        <Button onClick={() => update.mutate({ key: 'category_budgets', value: { budgets } }, { onSuccess: () => toast('Budgets saved') })}>Save Budgets</Button>
+        <Button onClick={() => update.mutate({ key: 'category_budgets', value: { budgets } }, { onSuccess: () => toast('Budgets saved'), onError: onSaveError })} disabled={update.isPending}>Save Budgets</Button>
       </div>
     </Card>
   );

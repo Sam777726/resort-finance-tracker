@@ -8,9 +8,11 @@ import { useLiveInvalidation } from '../../hooks/useLiveInvalidation';
 import { Toaster } from '../ui/Toaster';
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
+  const role = useAuthStore((s) => s.user?.role);
+  const items = NAV_ITEMS.filter((item) => !('adminOnly' in item) || !item.adminOnly || role === 'admin');
   return (
     <nav className="flex flex-col gap-0.5">
-      {NAV_ITEMS.map((item) => (
+      {items.map((item) => (
         <NavLink
           key={item.to}
           to={item.to}
