@@ -27,6 +27,21 @@ describe('computeDayPicnic', () => {
     expect(r.totalPax).toBe(0);
     expect(r.amount).toBe(0);
   });
+
+  it('applies a flat discount off the gross amount', () => {
+    // 3 full-rate pax at 1500 = 4500 gross, negotiated down to 4000
+    const r = computeDayPicnic({ packageId: 'd2', walkIn: false, paxBelow5: 0, pax5to10: 0, paxAbove10: 3, discountAmount: 500 }, pkg, 100);
+    expect(r.grossAmount).toBe(4500);
+    expect(r.discountAmount).toBe(500);
+    expect(r.amount).toBe(4000);
+  });
+
+  it('clamps a discount so amount never goes negative', () => {
+    const r = computeDayPicnic({ packageId: 'd2', walkIn: false, paxBelow5: 0, pax5to10: 0, paxAbove10: 1, discountAmount: 99999 }, pkg, 100);
+    expect(r.grossAmount).toBe(1500);
+    expect(r.discountAmount).toBe(1500);
+    expect(r.amount).toBe(0);
+  });
 });
 
 describe('autoSplitExtra', () => {
@@ -85,5 +100,17 @@ describe('computeOvernight', () => {
       { capacity: 2, rate: 6500 }, extraRates, 1200,
     );
     expect(r.nights).toBe(1);
+  });
+
+  it('applies a flat discount off the gross total, taken from room revenue not food cost', () => {
+    const r = computeOvernight(
+      { unitId: 'cottage', nights: 1, manualExtra: false, paxBelow5: 0, pax5to10: 0, paxAbove10: 2, discountAmount: 500 },
+      { capacity: 2, rate: 6500 }, extraRates, 1200,
+    );
+    expect(r.grossAmount).toBe(6500);
+    expect(r.discountAmount).toBe(500);
+    expect(r.totalAmount).toBe(6000);
+    expect(r.foodCostValue).toBe(2400); // unaffected by the discount
+    expect(r.roomRevenue).toBe(6000 - 2400);
   });
 });

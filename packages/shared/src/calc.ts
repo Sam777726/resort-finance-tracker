@@ -24,7 +24,9 @@ export function computeDayPicnic(input: DayPicnicInput, pkg: DayPackage, walkInS
 
   const base = pax5to10 * pkg.rate * 0.7 + paxAbove10 * pkg.rate * 1.0;
   const surcharge = input.walkIn ? totalPax * (walkInSurcharge || 0) : 0;
-  const amount = Math.round(base + surcharge);
+  const grossAmount = Math.round(base + surcharge);
+  const discountAmount = Math.min(grossAmount, clamp0(input.discountAmount));
+  const amount = grossAmount - discountAmount;
 
   const meals: MealCounts = {
     B: pkg.meals.B ? totalPax : 0,
@@ -33,7 +35,7 @@ export function computeDayPicnic(input: DayPicnicInput, pkg: DayPackage, walkInS
     D: pkg.meals.D ? totalPax : 0,
   };
 
-  return { totalPax, amount, meals };
+  return { totalPax, grossAmount, discountAmount, amount, meals };
 }
 
 /** Splits overnight pax into "included in the unit's base capacity" vs
@@ -79,10 +81,15 @@ export function computeOvernight(
 
   const extraCharge = (extra5to10 * extraRates.age5to10 + extraAbove10 * extraRates.above10 + extraBelow5 * extraRates.below5) * nights;
   const baseAmount = unit.rate * nights;
-  const totalAmount = Math.round(baseAmount + extraCharge);
+  const grossAmount = Math.round(baseAmount + extraCharge);
+  const discountAmount = Math.min(grossAmount, clamp0(input.discountAmount));
+  const totalAmount = grossAmount - discountAmount;
   const foodCostValue = Math.round((foodCostPerHead || 0) * totalPax * nights);
   const roomRevenue = totalAmount - foodCostValue;
   const meals: MealCounts = { B: totalPax * nights, L: totalPax * nights, H: totalPax * nights, D: totalPax * nights };
 
-  return { totalPax, nights, extraBelow5, extra5to10, extraAbove10, extraCharge, baseAmount, totalAmount, foodCostValue, roomRevenue, meals };
+  return {
+    totalPax, nights, extraBelow5, extra5to10, extraAbove10, extraCharge,
+    baseAmount, grossAmount, discountAmount, totalAmount, foodCostValue, roomRevenue, meals,
+  };
 }

@@ -28,9 +28,13 @@ interface Draft {
   extraBelow5: number;
   extra5to10: number;
   extraAbove10: number;
+  discountAmount: number;
   advanceAmount: number;
   advanceDate: string;
   advanceSplit: PaymentSplit;
+  partialAmount: number;
+  partialDate: string;
+  partialSplit: PaymentSplit;
   balanceStatus: 'pending' | 'received';
   balanceSplit: PaymentSplit;
   balanceReceivedDate: string;
@@ -40,8 +44,9 @@ interface Draft {
 function blankDraft(defaultUnitId: string): Draft {
   return {
     checkIn: today(), nights: 1, unitId: defaultUnitId, manualExtra: false,
-    paxBelow5: 0, pax5to10: 0, paxAbove10: 0, extraBelow5: 0, extra5to10: 0, extraAbove10: 0,
+    paxBelow5: 0, pax5to10: 0, paxAbove10: 0, extraBelow5: 0, extra5to10: 0, extraAbove10: 0, discountAmount: 0,
     advanceAmount: 0, advanceDate: today(), advanceSplit: { cash: 0, upi: 0, cc: 0 },
+    partialAmount: 0, partialDate: today(), partialSplit: { cash: 0, upi: 0, cc: 0 },
     balanceStatus: 'pending', balanceSplit: { cash: 0, upi: 0, cc: 0, cheque: 0 }, balanceReceivedDate: today(),
     notes: '',
   };
@@ -96,7 +101,10 @@ export function OvernightPage() {
                     <td className="py-2 px-2">{r.unitName}</td>
                     <td className="py-2 px-2 mono">{r.nights}</td>
                     <td className="py-2 px-2 mono">{r.totalPax}</td>
-                    <td className="py-2 px-2 mono text-right">{fmt(r.totalAmount)}</td>
+                    <td className="py-2 px-2 mono text-right">
+                      {fmt(r.totalAmount)}
+                      {r.discountAmount > 0 && <span className="block text-[10px] text-inkdim font-normal">−{fmt(r.discountAmount)} disc.</span>}
+                    </td>
                     <td className="py-2 px-2 mono text-right">{fmt(r.roomRevenue)}</td>
                     <td className="py-2 px-2">
                       <Pill tone={r.balance.status}>{r.balance.status}</Pill>{' '}
@@ -140,7 +148,9 @@ function OvernightForm({
           checkIn: initial.checkIn, nights: initial.nights, unitId: initial.unitId, manualExtra: initial.manualExtra,
           paxBelow5: initial.paxBelow5, pax5to10: initial.pax5to10, paxAbove10: initial.paxAbove10,
           extraBelow5: initial.extraBelow5, extra5to10: initial.extra5to10, extraAbove10: initial.extraAbove10,
+          discountAmount: initial.discountAmount,
           advanceAmount: initial.advance.amount, advanceDate: initial.advance.date ?? today(), advanceSplit: initial.advance.split,
+          partialAmount: initial.partial.amount, partialDate: initial.partial.date ?? today(), partialSplit: initial.partial.split,
           balanceStatus: initial.balance.status, balanceSplit: initial.balance.split, balanceReceivedDate: initial.balance.receivedDate ?? today(),
           notes: initial.notes,
         }
@@ -152,7 +162,7 @@ function OvernightForm({
     () => computeOvernight(draft, unit, settings.extra_person_rates, settings.general.foodCostPerHead),
     [draft, unit, settings],
   );
-  const balanceDue = Math.max(0, computed.totalAmount - draft.advanceAmount);
+  const balanceDue = Math.max(0, computed.totalAmount - draft.advanceAmount - draft.partialAmount);
 
   const create = useCreateOvernightEntry();
   const update = useUpdateOvernightEntry();
@@ -164,7 +174,9 @@ function OvernightForm({
       checkIn: draft.checkIn, nights: computed.nights, unitId: draft.unitId,
       manualExtra: draft.manualExtra, paxBelow5: draft.paxBelow5, pax5to10: draft.pax5to10, paxAbove10: draft.paxAbove10,
       extraBelow5: computed.extraBelow5, extra5to10: computed.extra5to10, extraAbove10: computed.extraAbove10,
+      discountAmount: draft.discountAmount,
       advance: { amount: draft.advanceAmount, date: draft.advanceDate, split: draft.advanceSplit },
+      partial: { amount: draft.partialAmount, date: draft.partialDate, split: draft.partialSplit },
       balance:
         draft.balanceStatus === 'received'
           ? { status: 'received', split: draft.balanceSplit, receivedDate: draft.balanceReceivedDate }
@@ -226,10 +238,18 @@ function OvernightForm({
         ))}
       </div>
 
+      <Field label="Discount (₹)">
+        <Input type="number" min={0} value={draft.discountAmount} onChange={(e) => setDraft((d) => ({ ...d, discountAmount: Number(e.target.value) || 0 }))} />
+      </Field>
+
       <div className="grid sm:grid-cols-3 gap-3">
         <div className="bg-surface border border-border rounded-xl p-2.5"><div className="text-[11.5px] uppercase text-inkdim font-semibold">Base Amount</div><div className="mono font-semibold">{fmt(computed.baseAmount)}</div></div>
         <div className="bg-surface border border-border rounded-xl p-2.5"><div className="text-[11.5px] uppercase text-inkdim font-semibold">Extra Person Charge</div><div className="mono font-semibold">{fmt(computed.extraCharge)}</div></div>
-        <div className="bg-accentsoft rounded-xl p-2.5"><div className="text-[11.5px] uppercase text-accentstrong font-semibold">Total Amount</div><div className="mono font-semibold">{fmt(computed.totalAmount)}</div></div>
+        <div className="bg-accentsoft rounded-xl p-2.5">
+          <div className="text-[11.5px] uppercase text-accentstrong font-semibold">Total Amount</div>
+          {computed.discountAmount > 0 && <div className="text-[10.5px] text-inkdim">Gross {fmt(computed.grossAmount)} − Discount {fmt(computed.discountAmount)}</div>}
+          <div className="mono font-semibold">{fmt(computed.totalAmount)}</div>
+        </div>
       </div>
       <div className="grid sm:grid-cols-2 gap-3">
         <div className="bg-surface border border-border rounded-xl p-2.5"><div className="text-[11.5px] uppercase text-inkdim font-semibold">Food Cost Value (₹{settings.general.foodCostPerHead}/head)</div><div className="mono font-semibold">{fmt(computed.foodCostValue)}</div></div>
@@ -242,6 +262,13 @@ function OvernightForm({
         <Field label="Advance Date"><Input type="date" value={draft.advanceDate} onChange={(e) => setDraft((d) => ({ ...d, advanceDate: e.target.value }))} /></Field>
       </div>
       {draft.advanceAmount > 0 && <SplitEditor target={draft.advanceAmount} value={draft.advanceSplit} onChange={(s) => setDraft((d) => ({ ...d, advanceSplit: s }))} />}
+
+      <h3 className="text-sm font-semibold m-0">Partial Payment <span className="text-inkdim font-normal text-xs">(optional — a second payment before the final balance)</span></h3>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <Field label="Partial Amount"><Input type="number" min={0} value={draft.partialAmount} onChange={(e) => setDraft((d) => ({ ...d, partialAmount: Number(e.target.value) || 0 }))} /></Field>
+        <Field label="Partial Payment Date"><Input type="date" value={draft.partialDate} onChange={(e) => setDraft((d) => ({ ...d, partialDate: e.target.value }))} /></Field>
+      </div>
+      {draft.partialAmount > 0 && <SplitEditor target={draft.partialAmount} value={draft.partialSplit} onChange={(s) => setDraft((d) => ({ ...d, partialSplit: s }))} />}
 
       <h3 className="text-sm font-semibold m-0">Balance Payment</h3>
       <div className="flex gap-4">

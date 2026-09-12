@@ -26,7 +26,10 @@ function toJson(row: IncomeDay) {
     totalPax: row.totalPax,
     meals: row.meals,
     amount: row.amount,
+    discountAmount: row.discountAmount,
+    grossAmount: row.amount + row.discountAmount,
     advance: { amount: row.advanceAmount, date: row.advanceDate ? toDateOnly(row.advanceDate) : null, split: row.advanceSplit },
+    partial: { amount: row.partialAmount, date: row.partialDate ? toDateOnly(row.partialDate) : null, split: row.partialSplit ?? {} },
     balance: {
       amount: row.balanceAmount,
       status: row.balanceStatus,
@@ -115,10 +118,11 @@ export class IncomeDayService {
     if (!pkg) throw new BadRequestException('No day packages configured');
     const walkInSurcharge = (bundle.general as { walkInSurcharge: number }).walkInSurcharge;
 
-    const { totalPax, amount, meals } = computeDayPicnic(dto, pkg, walkInSurcharge);
+    const { totalPax, amount, discountAmount, meals } = computeDayPicnic(dto, pkg, walkInSurcharge);
     if (totalPax === 0) throw new BadRequestException('Add at least 1 pax');
 
-    const balanceAmount = Math.max(0, amount - dto.advance.amount);
+    const partial = dto.partial;
+    const balanceAmount = Math.max(0, amount - dto.advance.amount - (partial?.amount ?? 0));
     const received = dto.balance.status === 'received';
 
     return {
@@ -135,9 +139,13 @@ export class IncomeDayService {
       totalPax,
       meals: meals as object,
       amount,
+      discountAmount,
       advanceAmount: dto.advance.amount,
       advanceDate: dto.advance.date ? new Date(dto.advance.date) : null,
       advanceSplit: dto.advance.split as object,
+      partialAmount: partial?.amount ?? 0,
+      partialDate: partial?.date ? new Date(partial.date) : null,
+      partialSplit: (partial?.split as object) ?? {},
       balanceAmount,
       balanceStatus: dto.balance.status,
       balanceSplit: received ? ((dto.balance.split as object) ?? {}) : {},

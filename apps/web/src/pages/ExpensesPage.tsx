@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -32,22 +32,7 @@ export function ExpensesPage() {
   const { data: settings } = useSettings();
   const [filter, setFilter] = useState({ from: '', to: '', category: '' });
   const { data: expenses } = useExpenses(filter.from || filter.to || filter.category ? filter : undefined);
-  const create = useCreateExpense();
   const del = useDeleteExpense();
-
-  const {
-    register, handleSubmit, watch, reset, formState: { errors },
-  } = useForm<ExpenseForm>({
-    resolver: zodResolver(expenseSchema),
-    defaultValues: { date: today(), method: 'Cash' },
-  });
-  const primary = watch('primary');
-
-  const categories = settings ? Object.keys(settings.expense_categories.categories) : [];
-  useEffect(() => {
-    if (categories.length && !primary) reset((v) => ({ ...v, primary: categories[0] }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categories.length]);
 
   const budgetRange = computeRange('month');
   const monthSpend = useMemo(() => {
@@ -59,19 +44,13 @@ export function ExpensesPage() {
     return out;
   }, [expenses, budgetRange.from, budgetRange.to]);
 
+  // Settings must be loaded before ExpenseForm mounts — same pattern as
+  // DayForm/OvernightForm — so its default Category (and therefore its
+  // Sub-Category options) are correct on the very first render, never
+  // painted empty while settings is still in flight. See ExpenseForm.
   if (!settings) return <div className="text-inkdim text-sm">Loading…</div>;
-  const subOptions = settings.expense_categories.categories[primary] ?? [];
+  const categories = Object.keys(settings.expense_categories.categories);
   const budgets = Object.entries(settings.category_budgets.budgets).filter(([, v]) => v > 0);
-
-  const onSubmit = async (data: ExpenseForm) => {
-    try {
-      await create.mutateAsync(data);
-      toast('Expense saved');
-      reset({ date: data.date, method: data.method, primary: data.primary });
-    } catch (err) {
-      toast(apiErrorMessage(err));
-    }
-  };
 
   const rows = (expenses ?? []).slice().sort((a, b) => (a.date < b.date ? 1 : -1));
 
@@ -82,32 +61,7 @@ export function ExpensesPage() {
         <div className="text-inkdim text-sm">Log costs by category & sub-category</div>
       </div>
 
-      <Card className="p-4">
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-3">
-          <div className="grid sm:grid-cols-4 gap-3">
-            <Field label="Date"><Input type="date" {...register('date')} /></Field>
-            <Field label="Category">
-              <Select {...register('primary')}>{categories.map((c) => <option key={c}>{c}</option>)}</Select>
-            </Field>
-            <Field label="Sub-Category">
-              <Select {...register('sub')}>{subOptions.map((s) => <option key={s}>{s}</option>)}</Select>
-            </Field>
-            <Field label="Amount (₹)" error={errors.amount?.message}>
-              <Input type="number" min={0} {...register('amount')} />
-            </Field>
-          </div>
-          <div className="grid sm:grid-cols-3 gap-3">
-            <Field label="Payment Method">
-              <Select {...register('method')}>{['Cash', 'UPI', 'Credit Card', 'Cheque'].map((m) => <option key={m}>{m}</option>)}</Select>
-            </Field>
-            <Field label="Vendor (optional)"><Input {...register('vendor')} /></Field>
-            <Field label="Description"><Input {...register('description')} /></Field>
-          </div>
-          <div className="flex justify-end">
-            <Button type="submit" disabled={create.isPending}>Save Expense</Button>
-          </div>
-        </form>
-      </Card>
+      <ExpenseForm settings={settings} />
 
       {budgets.length > 0 && (
         <Card className="p-4">
@@ -167,5 +121,89 @@ export function ExpensesPage() {
         )}
       </Card>
     </div>
+  );
+}
+
+// A separate component that only mounts once `settings` is guaranteed —
+// same pattern as DayForm/OvernightForm. defaultValues.primary is computed
+// synchronously from `settings`, so there's no render where Sub-Category
+// has zero options (the bug that made it look broken/unresponsive on
+// mobile: a slower device could paint that empty-options frame right as
+// someone tapped it).
+function ExpenseForm({ settings }: { settings: NonNullable<ReturnType<typeof useSettings>['data']> }) {
+  const categories = Object.keys(settings.expense_categories.categories);
+  const defaultPrimary = categories[0] ?? '';
+  const defaultSub = settings.expense_categories.categories[defaultPrimary]?.[0] ?? '';
+  const create = useCreateExpense();
+
+  const {
+    register, handleSubmit, watch, reset, setValue, formState: { errors },
+  } = useForm<ExpenseForm>({
+    resolver: zodResolver(expenseSchema),
+    defaultValues: { date: today(), method: 'Cash', primary: defaultPrimary, sub: defaultSub },
+  });
+  const date = watch('date');
+  const primary = watch('primary');
+  const sub = watch('sub');
+  const subOptions = settings.expense_categories.categories[primary] ?? [];
+
+  // Category and Sub-Category are fully controlled (value+onChange, not
+  // register()'s uncontrolled ref) precisely because Sub-Category's
+  // <option> list depends on Category: an uncontrolled select's DOM value
+  // gets assigned before React has re-rendered with the new option list,
+  // which silently fails (no matching <option> yet) and can leave the
+  // wrong sub-category selected. Controlled means both the options and the
+  // value come from the same render, together — no such race.
+  const onCategoryChange = (next: string) => {
+    setValue('primary', next);
+    // The previously-selected sub-category almost certainly doesn't exist
+    // in the new category's list — reset it explicitly instead of leaving
+    // the form's internal value pointing at a sub-category that no longer
+    // matches what's visually selected.
+    const nextSubs = settings.expense_categories.categories[next] ?? [];
+    setValue('sub', nextSubs[0] ?? '');
+  };
+
+  const onSubmit = async (data: ExpenseForm) => {
+    try {
+      await create.mutateAsync(data);
+      toast('Expense saved');
+      reset({ date: data.date, method: data.method, primary: data.primary, sub: data.sub });
+    } catch (err) {
+      toast(apiErrorMessage(err));
+    }
+  };
+
+  return (
+    <Card className="p-4">
+      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-3">
+        <div className="grid sm:grid-cols-4 gap-3">
+          <Field label="Date"><Input type="date" value={date} onChange={(e) => setValue('date', e.target.value)} /></Field>
+          <Field label="Category">
+            <Select value={primary} onChange={(e) => onCategoryChange(e.target.value)}>
+              {categories.map((c) => <option key={c}>{c}</option>)}
+            </Select>
+          </Field>
+          <Field label="Sub-Category">
+            <Select value={sub} onChange={(e) => setValue('sub', e.target.value)}>
+              {subOptions.map((s) => <option key={s}>{s}</option>)}
+            </Select>
+          </Field>
+          <Field label="Amount (₹)" error={errors.amount?.message}>
+            <Input type="number" min={0} {...register('amount')} />
+          </Field>
+        </div>
+        <div className="grid sm:grid-cols-3 gap-3">
+          <Field label="Payment Method">
+            <Select {...register('method')}>{['Cash', 'UPI', 'Credit Card', 'Cheque'].map((m) => <option key={m}>{m}</option>)}</Select>
+          </Field>
+          <Field label="Vendor (optional)"><Input {...register('vendor')} /></Field>
+          <Field label="Description"><Input {...register('description')} /></Field>
+        </div>
+        <div className="flex justify-end">
+          <Button type="submit" disabled={create.isPending}>Save Expense</Button>
+        </div>
+      </form>
+    </Card>
   );
 }
