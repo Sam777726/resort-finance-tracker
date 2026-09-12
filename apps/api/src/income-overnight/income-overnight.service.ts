@@ -78,8 +78,8 @@ export class IncomeOvernightService {
   }
 
   async update(id: string, dto: CreateOvernightEntryDto) {
-    await this.assertExists(id);
-    const payload = await this.buildPayload(dto);
+    const existing = await this.assertExists(id);
+    const payload = await this.buildPayload(dto, existing);
     const row = await this.prisma.incomeOvernight.update({ where: { id }, data: payload });
     this.events.broadcast(LIVE_EVENTS.OVERNIGHT_CHANGED);
     return toJson(row);
@@ -113,7 +113,7 @@ export class IncomeOvernightService {
     return row;
   }
 
-  private async buildPayload(dto: CreateOvernightEntryDto) {
+  private async buildPayload(dto: CreateOvernightEntryDto, existing?: IncomeOvernight) {
     const bundle = await this.settings.getBundle();
     const units = (bundle.tent_types as { items: TentType[] }).items;
     const unit = units.find((u) => u.id === dto.unitId) ?? units[0];
@@ -121,7 +121,16 @@ export class IncomeOvernightService {
     const extraRates = bundle.extra_person_rates as { below5: number; age5to10: number; above10: number };
     const foodCostPerHead = (bundle.general as { foodCostPerHead: number }).foodCostPerHead;
 
-    const c = computeOvernight(dto, unit, extraRates, foodCostPerHead);
+    // Same reasoning as IncomeDayService: editing an existing entry must
+    // never silently reprice it just because a tent/room's rate or
+    // capacity changed in Settings since it was booked. Only switching to
+    // a *different* unit is a deliberate reprice; `create` never passes
+    // `existing`, so new bookings always price at today's rate.
+    const effectiveUnit = existing && existing.unitId === dto.unitId
+      ? { ...unit, rate: existing.baseRate, capacity: existing.capacity }
+      : unit;
+
+    const c = computeOvernight(dto, effectiveUnit, extraRates, foodCostPerHead);
     if (c.totalPax === 0) throw new BadRequestException('Add at least 1 pax');
 
     const partial = dto.partial;
@@ -133,8 +142,8 @@ export class IncomeOvernightService {
       nights: c.nights,
       unitId: unit.id,
       unitName: unit.name,
-      capacity: unit.capacity,
-      baseRate: unit.rate,
+      capacity: effectiveUnit.capacity,
+      baseRate: effectiveUnit.rate,
       paxBelow5: dto.paxBelow5,
       pax5to10: dto.pax5to10,
       paxAbove10: dto.paxAbove10,

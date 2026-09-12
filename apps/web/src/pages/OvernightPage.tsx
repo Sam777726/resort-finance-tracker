@@ -157,7 +157,20 @@ function OvernightForm({
       : blankDraft(units[0]?.id ?? ''),
   );
 
-  const unit = units.find((u) => u.id === draft.unitId) ?? units[0];
+  const liveUnit = units.find((u) => u.id === draft.unitId) ?? units[0];
+  // Mirrors income-overnight.service.ts's buildPayload: editing an entry
+  // without changing which tent is selected must preview (and, on save,
+  // actually charge) the rate/capacity that were in effect when it was
+  // booked, not whatever Settings says today — otherwise this preview
+  // would show a total the save doesn't actually produce. Memoized (not
+  // just a plain conditional) so this object keeps a stable reference
+  // across renders where its inputs haven't changed — otherwise every
+  // render would fabricate a new object and defeat the computed useMemo
+  // below entirely.
+  const unit = useMemo(
+    () => (initial && initial.unitId === draft.unitId ? { ...liveUnit, rate: initial.baseRate, capacity: initial.capacity } : liveUnit),
+    [initial, draft.unitId, liveUnit],
+  );
   const computed = useMemo(
     () => computeOvernight(draft, unit, settings.extra_person_rates, settings.general.foodCostPerHead),
     [draft, unit, settings],
