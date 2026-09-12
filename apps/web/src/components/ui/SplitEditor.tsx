@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { PaymentSplit } from '@camp-dilly/shared';
 
 /** Cash is always the auto-computed remainder of (target - upi - cc - cheque)
@@ -11,6 +12,18 @@ export function SplitEditor({
   const cc = value.cc ?? 0;
   const cheque = includeCheque ? value.cheque ?? 0 : 0;
   const cash = Math.max(0, Math.round(target - upi - cc - cheque));
+
+  // The Cash figure above is purely derived for display. If the target
+  // amount changes (e.g. typing an Advance Amount) and the split is never
+  // otherwise touched — the common case for an all-cash payment — nothing
+  // above would ever call onChange, so the parent's stored split would
+  // silently stay whatever it was initialized to (usually all zero) even
+  // though the UI visibly shows the correct cash figure. Keep the two in
+  // sync whenever the target changes.
+  useEffect(() => {
+    if (cash !== (value.cash ?? 0)) onChange({ ...value, cash });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target]);
 
   const update = (patch: Partial<PaymentSplit>) => {
     const next = { ...value, ...patch };

@@ -12,6 +12,7 @@ export type {
   PaymentSplit,
   BalanceStatus,
   AdvancePayment,
+  PartialPayment,
   BalancePayment,
   MealCounts,
   DayPackage,

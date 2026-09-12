@@ -15,6 +15,13 @@ class AdvanceDto {
   @ApiProperty({ type: SplitDto }) @ValidateNested() @Type(() => SplitDto) split!: SplitDto;
 }
 
+/** The middle of three payment phases — see PartialPayment in @camp-dilly/shared. */
+class PartialDto {
+  @ApiProperty() @IsInt() @Min(0) amount!: number;
+  @ApiProperty({ required: false, nullable: true }) @IsOptional() @IsDateString() date?: string | null;
+  @ApiProperty({ type: SplitDto }) @ValidateNested() @Type(() => SplitDto) split!: SplitDto;
+}
+
 class BalanceDto {
   @ApiProperty({ enum: ['pending', 'received'] }) @IsIn(['pending', 'received']) status!: 'pending' | 'received';
   @ApiProperty({ type: SplitDto, required: false }) @IsOptional() @ValidateNested() @Type(() => SplitDto) split?: SplitDto;
@@ -32,7 +39,11 @@ export class CreateDayEntryDto {
   @ApiProperty() @IsInt() @Min(0) pax5to10!: number;
   @ApiProperty() @IsInt() @Min(0) paxAbove10!: number;
 
+  @ApiProperty({ required: false, description: 'Flat rupee discount off the computed gross amount' })
+  @IsOptional() @IsInt() @Min(0) discountAmount?: number;
+
   @ApiProperty({ type: AdvanceDto }) @ValidateNested() @Type(() => AdvanceDto) advance!: AdvanceDto;
+  @ApiProperty({ type: PartialDto, required: false }) @IsOptional() @ValidateNested() @Type(() => PartialDto) partial?: PartialDto;
   @ApiProperty({ type: BalanceDto }) @ValidateNested() @Type(() => BalanceDto) balance!: BalanceDto;
 
   @ApiProperty({ required: false }) @IsOptional() @IsString() notes?: string;

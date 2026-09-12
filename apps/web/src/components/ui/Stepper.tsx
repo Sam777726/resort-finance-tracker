@@ -1,3 +1,6 @@
+// Typing the count directly (not just tapping +/-) matters for large group
+// bookings — nobody should have to tap "+" fifty times to enter a 50-pax
+// booking.
 export function Stepper({ label, value, onChange }: { label: string; value: number; onChange: (next: number) => void }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -10,7 +13,15 @@ export function Stepper({ label, value, onChange }: { label: string; value: numb
         >
           −
         </button>
-        <span className="mono font-bold text-base min-w-6 text-center">{value}</span>
+        <input
+          type="number"
+          inputMode="numeric"
+          min={0}
+          value={value}
+          onChange={(e) => onChange(Math.max(0, Math.round(Number(e.target.value)) || 0))}
+          onFocus={(e) => e.target.select()}
+          className="mono font-bold text-base w-12 text-center bg-transparent border-none focus:outline-none"
+        />
         <button
           type="button"
           onClick={() => onChange(value + 1)}

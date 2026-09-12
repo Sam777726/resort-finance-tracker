@@ -25,9 +25,13 @@ interface Draft {
   paxBelow5: number;
   pax5to10: number;
   paxAbove10: number;
+  discountAmount: number;
   advanceAmount: number;
   advanceDate: string;
   advanceSplit: PaymentSplit;
+  partialAmount: number;
+  partialDate: string;
+  partialSplit: PaymentSplit;
   balanceStatus: 'pending' | 'received';
   balanceSplit: PaymentSplit;
   balanceReceivedDate: string;
@@ -37,8 +41,9 @@ interface Draft {
 function blankDraft(defaultPackageId: string): Draft {
   return {
     date: today(), packageId: defaultPackageId, walkIn: false, tentId: '',
-    paxBelow5: 0, pax5to10: 0, paxAbove10: 0,
+    paxBelow5: 0, pax5to10: 0, paxAbove10: 0, discountAmount: 0,
     advanceAmount: 0, advanceDate: today(), advanceSplit: { cash: 0, upi: 0, cc: 0 },
+    partialAmount: 0, partialDate: today(), partialSplit: { cash: 0, upi: 0, cc: 0 },
     balanceStatus: 'pending', balanceSplit: { cash: 0, upi: 0, cc: 0, cheque: 0 }, balanceReceivedDate: today(),
     notes: '',
   };
@@ -98,7 +103,10 @@ export function DayPicnicPage() {
                     <td className="py-2 px-2">{r.packageLabel}</td>
                     <td className="py-2 px-2 mono">{r.totalPax}</td>
                     <td className="py-2 px-2 mono">{r.meals.B}/{r.meals.L}/{r.meals.H}/{r.meals.D}</td>
-                    <td className="py-2 px-2 mono text-right">{fmt(r.amount)}</td>
+                    <td className="py-2 px-2 mono text-right">
+                      {fmt(r.amount)}
+                      {r.discountAmount > 0 && <span className="block text-[10px] text-inkdim font-normal">−{fmt(r.discountAmount)} disc.</span>}
+                    </td>
                     <td className="py-2 px-2">
                       <Pill tone={r.balance.status}>{r.balance.status}</Pill>{' '}
                       <span className="mono text-xs">{fmt(r.balance.amount)}</span>
@@ -143,7 +151,9 @@ function DayForm({
       ? {
           date: initial.date, packageId: initial.packageId, walkIn: initial.walkIn, tentId: initial.tentId,
           paxBelow5: initial.paxBelow5, pax5to10: initial.pax5to10, paxAbove10: initial.paxAbove10,
+          discountAmount: initial.discountAmount,
           advanceAmount: initial.advance.amount, advanceDate: initial.advance.date ?? today(), advanceSplit: initial.advance.split,
+          partialAmount: initial.partial.amount, partialDate: initial.partial.date ?? today(), partialSplit: initial.partial.split,
           balanceStatus: initial.balance.status, balanceSplit: initial.balance.split, balanceReceivedDate: initial.balance.receivedDate ?? today(),
           notes: initial.notes,
         }
@@ -155,7 +165,7 @@ function DayForm({
     () => computeDayPicnic(draft, pkg, settings.general.walkInSurcharge),
     [draft, pkg, settings.general.walkInSurcharge],
   );
-  const balanceDue = Math.max(0, computed.amount - draft.advanceAmount);
+  const balanceDue = Math.max(0, computed.amount - draft.advanceAmount - draft.partialAmount);
 
   const create = useCreateDayEntry();
   const update = useUpdateDayEntry();
@@ -167,7 +177,9 @@ function DayForm({
     const payload = {
       date: draft.date, packageId: draft.packageId, walkIn: draft.walkIn, tentId: draft.tentId, tentName: tent?.name ?? '',
       paxBelow5: draft.paxBelow5, pax5to10: draft.pax5to10, paxAbove10: draft.paxAbove10,
+      discountAmount: draft.discountAmount,
       advance: { amount: draft.advanceAmount, date: draft.advanceDate, split: draft.advanceSplit },
+      partial: { amount: draft.partialAmount, date: draft.partialDate, split: draft.partialSplit },
       balance:
         draft.balanceStatus === 'received'
           ? { status: 'received', split: draft.balanceSplit, receivedDate: draft.balanceReceivedDate }
@@ -223,10 +235,21 @@ function DayForm({
         ))}
       </div>
 
+      <Field label="Discount (₹)">
+        <Input type="number" min={0} value={draft.discountAmount} onChange={(e) => setDraft((d) => ({ ...d, discountAmount: Number(e.target.value) || 0 }))} />
+      </Field>
+
       <div className="bg-accentsoft rounded-xl p-3.5 flex justify-between items-center">
         <div>
           <div className="text-[11.5px] font-bold uppercase text-accentstrong">Total Amount</div>
-          <div className="mono text-2xl font-bold">{fmt(computed.amount)}</div>
+          {computed.discountAmount > 0 ? (
+            <>
+              <div className="text-xs text-inkdim">Gross {fmt(computed.grossAmount)} − Discount {fmt(computed.discountAmount)}</div>
+              <div className="mono text-2xl font-bold">{fmt(computed.amount)}</div>
+            </>
+          ) : (
+            <div className="mono text-2xl font-bold">{fmt(computed.amount)}</div>
+          )}
         </div>
         <div className="text-xs text-inkdim">{computed.totalPax} pax</div>
       </div>
@@ -242,6 +265,19 @@ function DayForm({
       </div>
       {draft.advanceAmount > 0 && (
         <SplitEditor target={draft.advanceAmount} value={draft.advanceSplit} onChange={(s) => setDraft((d) => ({ ...d, advanceSplit: s }))} />
+      )}
+
+      <h3 className="text-sm font-semibold m-0">Partial Payment <span className="text-inkdim font-normal text-xs">(optional — a second payment before the final balance, e.g. paid in full on the day)</span></h3>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <Field label="Partial Amount">
+          <Input type="number" min={0} value={draft.partialAmount} onChange={(e) => setDraft((d) => ({ ...d, partialAmount: Number(e.target.value) || 0 }))} />
+        </Field>
+        <Field label="Partial Payment Date">
+          <Input type="date" value={draft.partialDate} onChange={(e) => setDraft((d) => ({ ...d, partialDate: e.target.value }))} />
+        </Field>
+      </div>
+      {draft.partialAmount > 0 && (
+        <SplitEditor target={draft.partialAmount} value={draft.partialSplit} onChange={(s) => setDraft((d) => ({ ...d, partialSplit: s }))} />
       )}
 
       <h3 className="text-sm font-semibold m-0">Balance Payment</h3>

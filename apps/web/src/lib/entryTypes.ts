@@ -1,4 +1,4 @@
-import type { AdvancePayment, BalancePayment, MealCounts } from '@camp-dilly/shared';
+import type { AdvancePayment, BalancePayment, MealCounts, PartialPayment } from '@camp-dilly/shared';
 
 export interface DayEntry {
   id: string;
@@ -15,7 +15,10 @@ export interface DayEntry {
   totalPax: number;
   meals: MealCounts;
   amount: number;
+  discountAmount: number;
+  grossAmount: number;
   advance: AdvancePayment;
+  partial: PartialPayment;
   balance: BalancePayment;
   notes: string;
 }
@@ -42,7 +45,10 @@ export interface OvernightEntry {
   foodCostValue: number;
   roomRevenue: number;
   meals: MealCounts;
+  discountAmount: number;
+  grossAmount: number;
   advance: AdvancePayment;
+  partial: PartialPayment;
   balance: BalancePayment;
   notes: string;
 }

@@ -100,8 +100,12 @@ export class ReportsService {
       paymentTotals.cc += s.cc ?? 0;
       paymentTotals.cheque += s.cheque ?? 0;
     };
-    for (const r of dayRows) { addSplit(r.advanceSplit); if (r.balanceStatus === 'received') addSplit(r.balanceSplit); }
-    for (const r of overnightRows) { addSplit(r.advanceSplit); if (r.balanceStatus === 'received') addSplit(r.balanceSplit); }
+    // Partial (the middle of three payment phases) is money already in
+    // hand regardless of whether the final balance has been received yet
+    // — same treatment as advance, unlike balanceSplit which is gated on
+    // balanceStatus === 'received'.
+    for (const r of dayRows) { addSplit(r.advanceSplit); addSplit(r.partialSplit); if (r.balanceStatus === 'received') addSplit(r.balanceSplit); }
+    for (const r of overnightRows) { addSplit(r.advanceSplit); addSplit(r.partialSplit); if (r.balanceStatus === 'received') addSplit(r.balanceSplit); }
     for (const r of storeRows) {
       const m = r.method.toLowerCase();
       if (m === 'cash') paymentTotals.cash += r.amount;
